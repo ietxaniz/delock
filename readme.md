@@ -91,3 +91,7 @@ Delock is MIT licensed, as found in the [LICENSE](LICENSE) file.
 ## Contribution
 
 Contributions are welcome! Feel free to submit pull requests, create issues, or propose new features.
+
+## Further Reading
+
+For more insights on how `delock` can be used to detect and debug deadlocks in Go applications, check out this article: [Go Deadlock Detection: Delock Library](https://dev.to/ietxaniz/go-deadlock-detection-delock-library-1eig).

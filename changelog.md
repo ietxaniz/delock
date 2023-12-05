@@ -12,3 +12,4 @@ All notable changes to the `delock` project will be documented in this file.
 - `CHANGELOG.md` for tracking changes and version history.
 - `LICENSE` file with MIT license information.
 - example-go16.sh script that tests library works on go version 1.16
+- Additional examples to demonstrate various deadlock scenarios and the usage of `delock` in different contexts.
