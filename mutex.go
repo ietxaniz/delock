@@ -19,7 +19,7 @@ import (
 type Mutex struct {
 	innerMu   sync.Mutex
 	outerMu   sync.Mutex
-	stackInfo map[int]string
+	stackInfo map[int]stackInfoItem
 	lastID    int
 	Timeout   time.Duration
 }
@@ -69,11 +69,11 @@ func (m *Mutex) Lock() (int, error) {
 
 	m.innerMu.Lock()
 	if m.stackInfo == nil {
-		m.stackInfo = make(map[int]string)
+		m.stackInfo = make(map[int]stackInfoItem)
 	}
 	m.lastID = m.lastID + 1
 	id := m.lastID
-	m.stackInfo[id] = stackData
+	m.stackInfo[id] = stackInfoItem{stackData: stackData, lock: WRITE_LOCK}
 	m.innerMu.Unlock()
 
 	timeoutChan := make(chan int)
@@ -126,9 +126,7 @@ func (m *Mutex) Unlock(infoID int) {
 func (m *Mutex) getErrorWithStackInfo() error {
 	m.innerMu.Lock()
 	defer m.innerMu.Unlock()
-	errorInfo := "Deadlock detected\n\n"
-	for _, stackInfo := range m.stackInfo {
-		errorInfo = fmt.Sprintf("%s\n\n* * * * * * * * * * * * * * * * * \n%s", errorInfo, stackInfo)
-	}
-	return errors.New(errorInfo)
+	report := createReport(m.stackInfo)
+	report = fmt.Sprintf("\n\nDeadlock detected\n\n\n%s\n\n\n\n", report)
+	return errors.New(report)
 }

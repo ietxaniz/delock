@@ -1,6 +1,3 @@
-// Package delock provides deadlock detection capabilities for Go applications.
-// It extends the standard sync.Mutex and sync.RWMutex with additional features
-// like deadlock detection, stack trace logging, and timeout features for lock acquisition.
 package delock
 
 import (
@@ -12,21 +9,6 @@ import (
 	"sync"
 	"time"
 )
-
-// lockType defines the type of lock - read or write.
-type lockType int
-
-// Constants representing the type of lock.
-const (
-	READ_LOCK  lockType = 1
-	WRITE_LOCK lockType = 2
-)
-
-// stackInfoItem holds information about a lock, including its type and the stack data.
-type stackInfoItem struct {
-	lock      lockType
-	stackData string
-}
 
 // RWMutex extends sync.RWMutex with additional deadlock detection features.
 // It supports both read and write locks, with individual stack trace capture for each.
@@ -137,15 +119,9 @@ func (m *RWMutex) Unlock(infoID int) {
 func (m *RWMutex) getErrorWithStackInfo() error {
 	m.innerMu.Lock()
 	defer m.innerMu.Unlock()
-	errorInfo := "Deadlock detected\n\n"
-	for _, stackInfo := range m.stackInfo {
-		if stackInfo.lock == READ_LOCK {
-			errorInfo = fmt.Sprintf("%s\n\n* * * * * READ LOCK * * * * * * * * \n%s", errorInfo, stackInfo.stackData)
-		} else {
-			errorInfo = fmt.Sprintf("%s\n\n* * * * * WRITE LOCK * * * * * * * * \n%s", errorInfo, stackInfo.stackData)
-		}
-	}
-	return errors.New(errorInfo)
+	report := createReport(m.stackInfo)
+	report = fmt.Sprintf("\n\nDeadlock detected\n\n\n%s\n\n\n\n", report)
+	return errors.New(report)
 }
 
 // RLock attempts to acquire a read lock. Similar to Lock, it returns a unique identifier
