@@ -1,6 +1,7 @@
 package delock
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -48,59 +49,37 @@ func (m *RWMutex) getTimeout() time.Duration {
 // The method captures a stack trace at the time of lock attempt to aid in debugging.
 func (m *RWMutex) Lock() (int, error) {
 	timeout := m.getTimeout()
-	stackData := ""
-	bufferSize := 4096
-	for {
-		buffer := make([]byte, bufferSize)
-		n := runtime.Stack(buffer, false)
-		if n < bufferSize {
-			stackData = string(buffer[:n])
-			break
-		}
-		bufferSize *= 2
-	}
+	stackData := getStackTrace()
 
 	m.innerMu.Lock()
 	if m.stackInfo == nil {
 		m.stackInfo = make(map[int]stackInfoItem)
 	}
-	m.lastID = m.lastID + 1
+	m.lastID++
 	id := m.lastID
 	m.stackInfo[id] = stackInfoItem{stackData: stackData, lock: WRITE_LOCK}
 	m.innerMu.Unlock()
 
-	timeoutChan := make(chan int)
-	go func() {
-		time.Sleep(timeout)
-		timeoutChan <- 0
-	}()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 
-	lockChan := make(chan int)
+	lockAcquired := make(chan struct{})
 	go func() {
 		m.outerMu.Lock()
-		// Lock is acquired, but we need to check that timeout has not been fired before we return.
-		lockNotifyChan := make(chan int)
-		go func() {
-			lockChan <- 0
-		}()
-		lockNotifyTimeoutChan := make(chan int)
-		go func() {
-			time.Sleep(100 * time.Millisecond)
-		}()
 		select {
-		case <-lockNotifyChan:
-			return
-		case <-lockNotifyTimeoutChan:
-			// Although lock has been acquired it is late so we release the acquired lock and finish the goroutine.
+		case lockAcquired <- struct{}{}:
+		case <-ctx.Done():
 			m.outerMu.Unlock()
-			return
 		}
 	}()
 
 	select {
-	case <-lockChan:
+	case <-lockAcquired:
 		return id, nil
-	case <-timeoutChan:
+	case <-ctx.Done():
+		m.innerMu.Lock()
+		delete(m.stackInfo, id)
+		m.innerMu.Unlock()
 		return -1, m.getErrorWithStackInfo()
 	}
 }
@@ -128,59 +107,37 @@ func (m *RWMutex) getErrorWithStackInfo() error {
 // and an error if a deadlock is detected. It also captures the stack trace for debugging.
 func (m *RWMutex) RLock() (int, error) {
 	timeout := m.getTimeout()
-	stackData := ""
-	bufferSize := 4096
-	for {
-		buffer := make([]byte, bufferSize)
-		n := runtime.Stack(buffer, false)
-		if n < bufferSize {
-			stackData = string(buffer[:n])
-			break
-		}
-		bufferSize *= 2
-	}
+	stackData := getStackTrace()
 
 	m.innerMu.Lock()
 	if m.stackInfo == nil {
 		m.stackInfo = make(map[int]stackInfoItem)
 	}
-	m.lastID = m.lastID + 1
+	m.lastID++
 	id := m.lastID
 	m.stackInfo[id] = stackInfoItem{stackData: stackData, lock: READ_LOCK}
 	m.innerMu.Unlock()
 
-	timeoutChan := make(chan int)
-	go func() {
-		time.Sleep(timeout)
-		timeoutChan <- 0
-	}()
+	ctx, cancel := context.WithTimeout(context.Background(), timeout)
+	defer cancel()
 
-	lockChan := make(chan int)
+	lockAcquired := make(chan struct{})
 	go func() {
 		m.outerMu.RLock()
-		// Lock is acquired, but we need to check that timeout has not been fired before we return.
-		lockNotifyChan := make(chan int)
-		go func() {
-			lockChan <- 0
-		}()
-		lockNotifyTimeoutChan := make(chan int)
-		go func() {
-			time.Sleep(100 * time.Millisecond)
-		}()
 		select {
-		case <-lockNotifyChan:
-			return
-		case <-lockNotifyTimeoutChan:
-			// Although lock has been acquired it is late so we release the acquired lock and finish the goroutine.
+		case lockAcquired <- struct{}{}:
+		case <-ctx.Done():
 			m.outerMu.RUnlock()
-			return
 		}
 	}()
 
 	select {
-	case <-lockChan:
+	case <-lockAcquired:
 		return id, nil
-	case <-timeoutChan:
+	case <-ctx.Done():
+		m.innerMu.Lock()
+		delete(m.stackInfo, id)
+		m.innerMu.Unlock()
 		return -1, m.getErrorWithStackInfo()
 	}
 }
@@ -192,4 +149,19 @@ func (m *RWMutex) RUnlock(infoID int) {
 	m.innerMu.Unlock()
 
 	m.outerMu.RUnlock()
+}
+
+func getStackTrace() string {
+	stackData := ""
+	bufferSize := 4096
+	for {
+		buffer := make([]byte, bufferSize)
+		n := runtime.Stack(buffer, false)
+		if n < bufferSize {
+			stackData = string(buffer[:n])
+			break
+		}
+		bufferSize *= 2
+	}
+	return stackData
 }

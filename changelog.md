@@ -2,6 +2,14 @@
 
 All notable changes to the `delock` project will be documented in this file.
 
+## [0.3.0] - 2024-11-05
+
+### Fixed
+
+- Resolved goroutine accumulation issue in `Mutex` and `RWMutex`.
+- Updated `Lock` and `RLock` methods to use `context.WithTimeout` for efficient timeout management, ensuring that goroutines are terminated properly when the timeout expires.
+- Simplified locking mechanism to avoid redundant channels and intermediate goroutines, significantly improving resource management and stability.
+
 ## [0.2.0] - 2023-12-06
 
 ### Improved
